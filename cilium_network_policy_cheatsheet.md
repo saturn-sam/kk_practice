@@ -1,0 +1,1162 @@
+# Cilium Network Policy — Master Cheat Sheet
+
+CiliumClusterwideNetworkPolicy (CCNP), L3/L4/L7, DNS/FQDN,
+selectors, CIDRs, entities, deny rules, troubleshooting, and exam gotchas.
+
+NOTE: Examples use API version cilium.io/v2 and current Cilium policy concepts.
+Always verify feature/version-specific behavior against your deployed Cilium release.
+
+## 1. CORE MENTAL MODEL
+CNP = Cilium CRD for Kubernetes network policy with L3-L7 capabilities.
+CCNP = cluster-scoped version of CNP; no namespace in metadata/spec scope.
+
+Traffic direction:
+  ingress = traffic ENTERING the selected endpoint (destination side)
+  egress  = traffic LEAVING the selected endpoint (source side)
+
+Core pattern:
+  endpointSelector -> WHO is protected/selected
+  ingress/egress   -> WHAT direction
+  from*/to*        -> WHO/WHERE traffic may come from/go to
+  toPorts          -> L4 ports/protocols
+  rules.http/dns/... -> L7 application filtering
+
+IMPORTANT:
+  A policy becomes enforcement-relevant when it selects an endpoint and has
+  ingress and/or egress policy sections. Selecting an endpoint for ingress
+  puts ingress into policy mode; selecting it for egress puts egress into
+  policy mode.
+
+Default posture:
+  No relevant policy -> traffic is normally allowed (subject to other controls).
+  Once ingress is enforced -> traffic not explicitly allowed by ingress rules is denied.
+  Once egress is enforced  -> traffic not explicitly allowed by egress rules is denied.
+
+Policies are additive for ALLOW rules: another policy can add an allowed path.
+DENY rules are evaluated to override matching allows in Cilium policy semantics.
+
+## 2. MINIMAL CNP SKELETON
+```
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: my-policy
+  namespace: default
+spec:
+  endpointSelector:
+    matchLabels:
+      app: backend
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        app: frontend
+```
+## 3. SELECTORS — MOST IMPORTANT PART
+A) endpointSelector: selects the DESTINATION/SOURCE endpoints protected by policy
+```
+endpointSelector:
+  matchLabels:
+    app: backend
+```
+Multiple matchLabels = AND.
+
+Example:
+```
+  app: backend
+  env: prod
+```
+means endpoint must have BOTH labels.
+
+Empty selector:
+```
+  endpointSelector: {} 
+```
+selects all endpoints in the CNP namespace.
+
+B) fromEndpoints: selects INGRESS SOURCES
+
+C) toEndpoints: selects EGRESS DESTINATIONS
+```
+fromEndpoints:
+- matchLabels:
+    app: frontend
+
+toEndpoints:
+- matchLabels:
+    app: backend
+```
+D) matchExpressions
+endpointSelector:
+  matchExpressions:
+  - key: app
+    operator: In
+    values: [frontend, api]
+
+Operators commonly used:
+  In, NotIn, Exists, DoesNotExist
+
+E) Namespace labels / Kubernetes reserved labels
+Cilium exposes Kubernetes labels with k8s: prefixes in policy selectors.
+Common examples:
+  k8s:io.kubernetes.pod.namespace: default
+  k8s:k8s-app: kube-dns
+
+Use the exact labels visible from:
+  kubectl get pod --show-labels -A
+  kubectl get pod -n NAMESPACE POD -o jsonpath='{.metadata.labels}'
+
+F) any: label-key form
+Examples may use:
+  any:org: alliance
+This means the label key under the Kubernetes/Cilium label model.
+Exact label syntax should match what cilium endpoint labels show.
+
+## 4. SAME NAMESPACE vs OTHER NAMESPACE
+CNP is namespaced.
+An unqualified toEndpoints/fromEndpoints selector normally operates in the
+policy's namespace scope for endpoint matching.
+
+To select a Kubernetes namespace explicitly, include the namespace label:
+
+fromEndpoints:
+- matchLabels:
+    k8s:io.kubernetes.pod.namespace: frontend
+    app: web
+
+toEndpoints:
+- matchLabels:
+    k8s:io.kubernetes.pod.namespace: backend
+    app: api
+
+Best practice: explicitly include namespace labels when crossing namespaces;
+it removes ambiguity and is easier to audit.
+
+## 5. L3 — POD/ENDPOINT ALLOW
+Allow frontend -> backend:
+
+spec:
+  endpointSelector:
+    matchLabels:
+      app: backend
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        app: frontend
+
+Allow backend -> database:
+
+spec:
+  endpointSelector:
+    matchLabels:
+      app: database
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        app: backend
+
+IMPORTANT:
+Ingress and egress are evaluated at the endpoint side being protected.
+You do not always need to write both sides. However, if the SOURCE endpoint
+is in egress policy mode, its egress policy must allow the connection too.
+
+## 6. ALLOW ALL / EMPTY SELECTORS
+Allow all ingress sources to selected endpoint(s):
+
+endpointSelector:
+  matchLabels:
+    app: backend
+ingress:
+- fromEndpoints:
+  - {}
+
+Allow all egress destinations within the matching selector scope:
+
+egress:
+- toEndpoints:
+  - {}
+
+WARNING:
+"{}" does NOT mean cluster-wide in every context. Scope matters.
+Use explicit labels/entities/CIDRs whenever possible.
+
+## 7. L4 — PORT AND PROTOCOL
+Allow TCP/80 only:
+
+ingress:
+- fromEndpoints:
+  - matchLabels:
+      app: frontend
+  toPorts:
+  - ports:
+    - port: "80"
+      protocol: TCP
+
+Multiple ports:
+ports:
+- port: "80"
+  protocol: TCP
+- port: "443"
+  protocol: TCP
+
+UDP example:
+- port: "53"
+  protocol: UDP
+
+ANY:
+- port: "53"
+  protocol: ANY
+
+Port ranges (where supported by the policy schema/version):
+- port: "30000"
+  endPort: 32767
+  protocol: TCP
+
+Think in layers:
+  L3 selector/CIDR -> which peers
+  L4 toPorts        -> which port/protocol
+  L7 rules          -> which application requests
+
+## 8. L7 — HTTP
+Allow GET /public only on TCP/80:
+
+ingress:
+- fromEndpoints:
+  - matchLabels:
+      app: frontend
+  toPorts:
+  - ports:
+    - port: "80"
+      protocol: TCP
+    rules:
+      http:
+      - method: GET
+        path: "/public"
+
+Multiple HTTP methods/paths:
+http:
+- method: GET
+  path: "/api/v1/items"
+- method: POST
+  path: "/api/v1/items"
+
+Headers:
+http:
+- method: GET
+  path: "/private"
+  headers:
+  - "X-My-Header: true"
+
+IMPORTANT:
+If you specify HTTP L7 rules on a port, traffic must match the L7 rules.
+L7 enforcement narrows what is allowed on the L4 port.
+
+Regex/path note:
+Cilium examples may use regex-style path matching; anchor carefully, e.g.
+  path: "/path2$"
+
+## 9. L7 VISIBILITY ONLY (HTTP / DNS)
+To observe L7 without narrowing the application method/path:
+
+rules:
+  http:
+  - {}
+
+This keeps L4 matching while enabling HTTP visibility for supported traffic.
+
+DNS visibility example:
+
+toPorts:
+- ports:
+  - port: "53"
+    protocol: ANY
+  rules:
+    dns:
+    - matchPattern: "*"
+
+Use Hubble/cilium monitor to inspect observed flows.
+
+## 10. DNS POLICY
+Typical pattern: allow DNS only to kube-dns/CoreDNS, optionally restrict names.
+
+Egress DNS example:
+
+egress:
+- toEndpoints:
+  - matchLabels:
+      k8s:io.kubernetes.pod.namespace: kube-system
+      k8s:k8s-app: kube-dns
+  toPorts:
+  - ports:
+    - port: "53"
+      protocol: ANY
+    rules:
+      dns:
+      - matchPattern: "*"
+
+Only specific names:
+dns:
+- matchName: "api.example.com"
+- matchPattern: "*.example.com"
+
+Important distinction:
+  DNS L7 rule controls DNS QUERY visibility/allowance.
+  toFQDNs controls traffic to IPs learned from DNS names.
+
+## 11. toFQDNs — INTERNET / DNS-NAME BASED EGRESS
+Allow egress to a DNS name:
+
+egress:
+- toFQDNs:
+  - matchName: "api.example.com"
+
+Wildcard:
+- matchPattern: "*.example.com"
+
+Common complete pattern:
+1) Allow pod -> DNS service on UDP/TCP 53 with dns rule.
+2) Allow pod -> destination using toFQDNs.
+3) Add toPorts for destination L4 restriction if needed.
+
+Example:
+egress:
+- toEndpoints:
+  - matchLabels:
+      k8s:io.kubernetes.pod.namespace: kube-system
+      k8s:k8s-app: kube-dns
+  toPorts:
+  - ports:
+    - port: "53"
+      protocol: ANY
+    rules:
+      dns:
+      - matchPattern: "*"
+- toFQDNs:
+  - matchName: "api.example.com"
+  toPorts:
+  - ports:
+    - port: "443"
+      protocol: TCP
+
+DNS policy does NOT itself authorize arbitrary connections to returned IPs.
+The data-plane destination rule (e.g. toFQDNs) is what permits the connection.
+
+## 12. CIDR — EXTERNAL IP RANGES
+Allow to single IP:
+
+egress:
+- toCIDR:
+  - "20.1.1.1/32"
+
+Allow to network:
+- toCIDR:
+  - "10.0.0.0/8"
+
+Exclude a subnet with toCIDRSet:
+
+toCIDRSet:
+- cidr: "10.0.0.0/8"
+  except:
+  - "10.96.0.0/12"
+
+Ingress external source:
+ingress:
+- fromCIDR:
+  - "203.0.113.10/32"
+
+CIDRSet:
+fromCIDRSet:
+- cidr: "203.0.113.0/24"
+  except:
+  - "203.0.113.128/25"
+
+IPv6 works with IPv6 CIDRs where enabled.
+
+## 13. ENTITIES — SPECIAL IDENTITIES
+Common Cilium entities include concepts such as:
+  cluster
+  world
+  host
+  remote-node
+  health
+  all
+
+Examples:
+Allow traffic from anywhere outside/inside based on entity:
+
+ingress:
+- fromEntities:
+  - world
+
+Allow only cluster-originated sources:
+ingress:
+- fromEntities:
+  - cluster
+
+Allow egress to all entities:
+egress:
+- toEntities:
+  - all
+
+Use entities carefully; they are broader than endpoint label selectors.
+Check `cilium policy get` / Cilium docs for the exact entity semantics in your version.
+
+## 14. ENTITY WORLD vs CLUSTER — EXAM GOTCHA
+world = traffic from outside the cluster / external world identity.
+cluster = cluster-internal entities in the Cilium identity model.
+
+Example external lockdown idea:
+endpointSelector: {}
+ingress:
+- fromEntities:
+  - cluster
+
+This allows cluster-originated ingress and excludes world traffic for the
+selected endpoints (subject to other applicable policies/paths).
+
+## 15. INGRESS + EGRESS IN ONE POLICY
+Typical app policy:
+
+spec:
+  endpointSelector:
+    matchLabels:
+      app: api
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        app: frontend
+    toPorts:
+    - ports:
+      - port: "8080"
+        protocol: TCP
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        app: database
+    toPorts:
+    - ports:
+      - port: "5432"
+        protocol: TCP
+
+## 16. EGRESS DEFAULT-DENY
+Select workload and define egress; everything not explicitly allowed is denied.
+
+Deny-all egress shell:
+
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: deny-all-egress
+spec:
+  endpointSelector:
+    matchLabels:
+      app: frontend
+  egress: []
+
+Equivalent idea with a policy selecting the endpoint and no useful egress
+allow rules: endpoint enters egress policy mode and unspecified traffic is denied.
+
+Common production pattern:
+  default deny egress
+  + allow DNS
+  + allow required services
+  + allow approved external/FQDN destinations
+
+## 17. INGRESS DEFAULT-DENY
+
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: deny-all-ingress
+spec:
+  endpointSelector:
+    matchLabels:
+      app: backend
+  ingress: []
+
+Then create separate allow policies for intended sources.
+
+## 18. DENY RULES — egressDeny / ingressDeny
+Cilium supports explicit deny sections in CNP.
+A matching deny can override a matching allow.
+
+Example: allow all egress but deny frontend -> backend:
+
+spec:
+  endpointSelector:
+    matchLabels:
+      role: frontend
+  egress:
+  - toEntities:
+    - all
+  egressDeny:
+  - toEndpoints:
+    - matchLabels:
+        role: backend
+
+Conceptually:
+  egress allow = broad permit
+  egressDeny   = carve-out block
+
+Use deny with care; it can make policy interactions harder to audit.
+
+## 19. NEGATIVE MATCHING / EXCEPTIONS
+Use matchExpressions for endpoint selection:
+
+endpointSelector:
+  matchExpressions:
+  - key: environment
+    operator: NotIn
+    values:
+    - dev
+
+Use `except` under CIDRSet for IP exceptions.
+
+For L7, explicitly omit paths/methods you do not want rather than trying to
+express every negative condition with labels.
+
+## 20. SERVICE ACCOUNT SELECTORS
+Cilium supports selecting endpoints via Kubernetes service-account identity
+using the appropriate selector form in supported versions/configurations.
+
+Common intent:
+  allow only Pods running under service account `payments-sa`.
+
+Because field names/selector syntax can be release-specific, verify against the
+Cilium version deployed before using this in production or an exam environment.
+
+Always check:
+  kubectl get pod POD -o jsonpath='{.spec.serviceAccountName}'
+
+## 21. KAFKA / OTHER L7 PROTOCOLS
+Cilium can enforce supported L7 protocols in `rules` under `toPorts`.
+Examples may include:
+  http
+  dns
+  kafka
+  grpc (where supported by the installed proxy/config)
+
+Generic structure:
+
+toPorts:
+- ports:
+  - port: "9092"
+    protocol: TCP
+  rules:
+    kafka:
+    - apiKey: Produce
+      apiVersion: 0
+      topic: payments
+
+Do not copy protocol-specific fields blindly between Cilium releases.
+Verify the exact CRD/API supported by your version.
+
+## 22. TLS / ENCRYPTION-RELATED POLICY
+Cilium policy can integrate with Layer 7 visibility/proxying and, in relevant
+features, TLS/SNI-based controls.
+
+Important distinction:
+  Network policy is not the same as mTLS authorization.
+  Istio/service-mesh authorization and Cilium L3/L4/L7 policy solve different
+  control-plane/data-plane problems.
+
+For encrypted HTTPS, ordinary HTTP L7 inspection may require traffic to be
+visible to the relevant proxy/inspection path. Use SNI/TLS policy features only
+when explicitly supported/configured.
+
+## 23. ICMP
+Where supported, Cilium can express ICMP/ICMPv6 rules for diagnostic/control traffic.
+
+Do not assume a generic TCP rule permits ICMP ping.
+If ping is required, create the corresponding ICMP policy supported by your
+Cilium version.
+
+## 24. HOST POLICIES (CCNP + NODE SELECTOR)
+Host policies are cluster-scoped policies using a node selector rather than
+an endpoint selector.
+
+Example shape:
+
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: host-policy
+spec:
+  nodeSelector:
+    matchLabels:
+      kubernetes.io/os: linux
+  ingress:
+  - fromEntities:
+    - cluster
+
+Host policy is different from workload/pod policy.
+Node Selector is supported in CiliumClusterwideNetworkPolicy.
+
+## 25. CCNP — CLUSTERWIDE POLICY
+Use when policy must not be constrained to a namespace.
+
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: clusterwide-policy
+spec:
+  endpointSelector:
+    matchLabels:
+      app: backend
+  ingress:
+  - fromEntities:
+    - cluster
+
+Key difference:
+  CNP  = namespaced CRD
+  CCNP = cluster-scoped CRD
+
+CCNP is useful for global guardrails and common security controls.
+Node selector is available in CCNP for host policy use cases.
+
+## 26. CNP vs KUBERNETES NetworkPolicy
+Kubernetes NetworkPolicy:
+  standardized
+  primarily L3/L4
+
+CiliumNetworkPolicy:
+  Cilium-specific
+  L3-L7 features
+  CIDR/FQDN/entities/L7/DENY/etc.
+
+Cilium can enforce multiple policy types at once.
+Be careful: multiple policy formats can make the effective result harder to reason about.
+
+## 27. POLICY LOGIC — QUICK RULES
+1) Policies select endpoints with `endpointSelector`.
+2) `ingress` controls traffic entering selected endpoints.
+3) `egress` controls traffic leaving selected endpoints.
+4) `fromEndpoints` = source endpoint selector.
+5) `toEndpoints` = destination endpoint selector.
+6) `fromCIDR` / `fromCIDRSet` = source IP ranges.
+7) `toCIDR` / `toCIDRSet` = destination IP ranges.
+8) `fromEntities` / `toEntities` = Cilium identity categories.
+9) `toPorts` = L4 restriction; combine with L7 rules for application filtering.
+10) L7 rules narrow traffic further; `{}` can be used for visibility in supported cases.
+11) Multiple ALLOW policies are additive.
+12) Matching explicit DENY can override ALLOW.
+13) Any selected endpoint can enter ingress/egress policy mode according to the
+    corresponding policy section that selects it.
+
+## 28. RESPONSE TRAFFIC / RETURN TRAFFIC
+Remember stateful connection behavior.
+A rule allowing an initiating flow must be understood together with return traffic.
+Cilium's policy engine tracks connections, so do not create unnecessarily broad
+reverse-direction rules just for TCP replies.
+
+Still inspect both sides when a connection fails:
+  source egress policy
+  destination ingress policy
+  intermediate/service/load-balancer path
+  DNS
+
+## 29. KUBERNETES SERVICE / SERVICE VIP GOTCHA
+Policy is enforced on endpoints/identities, not merely by the Service object.
+A Service selects Pods; policy normally selects the underlying endpoint identity.
+
+Troubleshoot Service problems by checking:
+  kubectl get svc
+  kubectl get endpoints
+  kubectl get endpointslice
+  kubectl get pod --show-labels
+
+Then verify Cilium identities/policy decisions.
+
+## 30. NAMESPACE / LABEL GOTCHA
+This selector:
+  matchLabels:
+    app: backend
+may match more broadly/narrowly depending on scope and policy type.
+For cross-namespace policies, explicitly add:
+  k8s:io.kubernetes.pod.namespace: NAMESPACE
+
+Verify actual endpoint labels with:
+  cilium endpoint list
+  cilium endpoint get <ID>
+
+## 31. DNS GOTCHAS
+Problem pattern:
+  DNS query allowed, but connection still denied.
+Reason:
+  DNS authorization and destination authorization are separate concerns.
+
+Typical fix:
+  Allow DNS to CoreDNS/kube-dns (UDP and/or TCP 53 as needed).
+  Add toFQDNs for permitted DNS names.
+  Add destination port 443/80/etc. if required.
+
+Do not assume DNS name alone authorizes arbitrary ports.
+
+## 32. CNP YAML COMMANDS
+Apply:
+  kubectl apply -f policy.yaml
+
+Delete:
+  kubectl delete cnp POLICY -n NAMESPACE
+  kubectl delete ciliumclusterwide-network-policy POLICY
+
+List:
+  kubectl get cnp -A
+  kubectl get ciliumclusterwideNetworkPolicy
+
+Describe:
+  kubectl describe cnp POLICY -n NAMESPACE
+
+Get raw YAML:
+  kubectl get cnp POLICY -n NAMESPACE -o yaml
+
+Validate Kubernetes object:
+  kubectl apply --dry-run=server -f policy.yaml
+
+## 33. CILIUM CLI — POLICY INSPECTION
+Common commands:
+  cilium status
+  cilium policy get
+  cilium policy get -n NAMESPACE
+  cilium endpoint list
+  cilium endpoint get ENDPOINT_ID
+
+See effective policy for an endpoint where supported:
+  cilium endpoint get ENDPOINT_ID
+
+Look for policy repository / identity / enforcement information.
+
+Exact CLI flags vary by Cilium version; use:
+  cilium policy --help
+  cilium endpoint --help
+
+## 34. HUBBLE — POLICY TROUBLESHOOTING
+Useful commands:
+  hubble status
+  hubble observe
+  hubble observe --namespace default
+  hubble observe --from-pod default/frontend
+  hubble observe --to-pod default/backend
+  hubble observe --verdict DROPPED
+
+Useful filters/fields to look for:
+  verdict
+  source
+  destination
+  identity
+  labels
+  traffic direction
+  L4 port
+  L7 HTTP method/path/DNS query
+
+Typical interpretation:
+  FORWARDED = flow permitted
+  DROPPED   = flow rejected somewhere in policy/path
+
+## 35. CILIUM MONITOR
+Useful:
+  cilium monitor
+  cilium monitor -t drop
+
+Drop tracing is especially valuable for policy troubleshooting.
+
+## 36. POLICY TRACE / DECISION DEBUGGING
+When available in your release, use Cilium policy tracing/debug commands to answer:
+  Why was source X allowed/denied to destination Y on port Z?
+
+General troubleshooting order:
+  1. Is Cilium healthy?
+  2. Does the policy select the intended endpoint?
+  3. Are endpoint labels exactly correct?
+  4. Is ingress or egress policy mode active?
+  5. Does source egress allow it?
+  6. Does destination ingress allow it?
+  7. Is L4 port/protocol allowed?
+  8. If L7 exists, does request match method/path/header?
+  9. If DNS/FQDN, is DNS allowed and destination FQDN rule present?
+ 10. Inspect Hubble / monitor for the actual verdict.
+
+## 37. POLICY STATUS
+After applying a CNP, inspect:
+  kubectl get cnp POLICY -n NAMESPACE -o yaml
+  kubectl describe cnp POLICY -n NAMESPACE
+
+Look for status/conditions indicating whether policy was accepted/applied.
+
+## 38. COMMON POLICY PATTERNS
+A) Frontend -> API 443
+endpointSelector:
+  matchLabels: {app: api}
+ingress:
+- fromEndpoints:
+  - matchLabels: {app: frontend}
+  toPorts:
+  - ports:
+    - port: "443"
+      protocol: TCP
+
+B) API -> PostgreSQL 5432
+egress:
+- toEndpoints:
+  - matchLabels: {app: postgres}
+  toPorts:
+  - ports:
+    - port: "5432"
+      protocol: TCP
+
+C) Backend -> external HTTPS
+egress:
+- toEntities: [world]
+  toPorts:
+  - ports:
+    - port: "443"
+      protocol: TCP
+
+D) Backend -> one external subnet
+egress:
+- toCIDRSet:
+  - cidr: "203.0.113.0/24"
+  toPorts:
+  - ports:
+    - port: "443"
+      protocol: TCP
+
+E) Backend -> approved FQDN
+egress:
+- toFQDNs:
+  - matchPattern: "*.example.com"
+  toPorts:
+  - ports:
+    - port: "443"
+      protocol: TCP
+
+F) Allow DNS only to CoreDNS + DNS L7 filtering
+See Section 10.
+
+## 39. MICROSERVICE ZERO-TRUST PATTERN
+A useful design:
+  default-deny ingress
+  default-deny egress
+  explicit service-to-service allows
+  explicit DNS allow
+  explicit internet/FQDN allow
+  explicit L7 HTTP restrictions where needed
+
+Example trust graph:
+  ingress-controller -> frontend : 443
+  frontend -> api              : 8080
+  api -> postgres              : 5432
+  api -> redis                 : 6379
+  api -> approved external APIs: 443
+  all workloads -> DNS         : 53
+
+Do NOT start by allowing `toEntities: all` everywhere and call it zero trust.
+
+## 40. INGRESS CONTROLLER / EXTERNAL TRAFFIC
+For external client -> Ingress -> backend:
+  backend ingress policy must account for the identity/source actually seen by
+  Cilium on that traffic path.
+
+Depending on architecture, the backend may see:
+  ingress controller identity
+  source IP / world
+  service/load-balancer path identity
+
+Never guess. Verify with Hubble.
+
+## 41. CLUSTER-WIDE DEFAULT-DENY DESIGN
+A CCNP can establish cluster-wide guardrails.
+Common goals:
+  deny unsolicited external ingress
+  protect sensitive namespaces/workloads
+  enforce DNS egress pattern
+  restrict host traffic
+
+Example external lockdown concept:
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: external-lockdown
+spec:
+  endpointSelector: {}
+  ingress:
+  - fromEntities:
+    - cluster
+
+Be careful: a clusterwide policy is powerful; test in staging first.
+
+## 42. MULTIPLE POLICIES — HOW TO THINK
+Policy A allows frontend -> api:8080.
+Policy B allows monitoring -> api:9090.
+Effective behavior can be the UNION of those allows for the selected endpoint,
+subject to any matching DENY rules and independent ingress/egress enforcement.
+
+Do not assume "last policy wins".
+Policy objects are not applied like firewall ACLs in simple top-to-bottom order.
+
+## 43. DENY + ALLOW GOTCHA
+If:
+  egress allows toEntities: all
+and:
+  egressDeny blocks toEndpoints: app=database
+then database remains blocked by the deny match.
+
+When debugging:
+  search both ALLOW and DENY sections.
+
+## 44. CILIUM LABEL / RESERVED LABEL GOTCHA
+Labels shown by Kubernetes and labels used internally by Cilium can differ in
+presentation. Kubernetes namespace/pod labels are commonly represented with
+`k8s:` prefixes in Cilium selectors.
+
+Commands to inspect:
+  cilium endpoint list
+  cilium endpoint get <ID>
+
+Use the exact label key displayed by Cilium when writing advanced selectors.
+
+## 45. NETWORK POLICY DOES NOT EQUAL FIREWALL
+CNP is identity-aware workload/network policy.
+It is not a replacement for:
+  perimeter firewall
+  WAF
+  host firewall
+  service mesh authorization
+  application authentication/authorization
+  IDS/IPS
+
+Layer controls appropriately.
+
+## 46. PERFORMANCE / L7 CONSIDERATIONS
+L3/L4 enforcement is generally cheaper than L7 proxy-based inspection.
+Use L7 where application-level enforcement/visibility is actually required.
+Avoid unnecessary wildcard L7 policies across huge workloads.
+
+Measure in your environment using Cilium/Hubble/host metrics.
+
+## 47. POLICY FILE TEMPLATE — PRODUCTION-FRIENDLY
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: api-policy
+  namespace: app-prod
+spec:
+  description: "Restrict API ingress and egress"
+  endpointSelector:
+    matchLabels:
+      app: api
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: frontend-prod
+        app: frontend
+    toPorts:
+    - ports:
+      - port: "8080"
+        protocol: TCP
+    rules:
+      http:
+      - method: GET
+        path: "/api/v1/.*"
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: data-prod
+        app: postgres
+    toPorts:
+    - ports:
+      - port: "5432"
+        protocol: TCP
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kube-system
+        k8s:k8s-app: kube-dns
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: ANY
+    rules:
+      dns:
+      - matchPattern: "*"
+
+## 48. COMMON MISTAKES
+1) Wrong `endpointSelector` — policy never selects the intended Pod.
+2) Forgot namespace label when selecting another namespace.
+3) Used `fromEndpoints` where `toEndpoints` was needed (direction confusion).
+4) Allowed port 443 but forgot DNS.
+5) Allowed DNS queries but forgot `toFQDNs` for the actual destination.
+6) Wrote L7 HTTP rule on wrong port.
+7) Used TCP for UDP DNS without considering application behavior.
+8) Assumed one policy replaces/overrides all other allows.
+9) Forgot a matching `egressDeny`/`ingressDeny`.
+10) Used very broad `toEntities: all` and defeated the intended zero-trust model.
+11) Assumed a Service object itself is the policy identity.
+12) Debugged from YAML only instead of checking actual Hubble flows.
+13) Copied version-specific fields from a different Cilium release.
+
+## 49. EXAM / INTERVIEW RAPID FIRE
+Q: CNP vs CCNP?
+A: CNP namespaced; CCNP cluster-scoped.
+
+Q: Who does endpointSelector select?
+A: The endpoints/workloads to which this policy applies.
+
+Q: fromEndpoints vs toEndpoints?
+A: Source of ingress vs destination of egress.
+
+Q: How restrict TCP port?
+A: toPorts -> ports -> port/protocol.
+
+Q: How restrict HTTP method/path?
+A: toPorts.rules.http.
+
+Q: How allow an FQDN destination?
+A: toFQDNs (usually alongside DNS allowance).
+
+Q: How allow an IP/CIDR?
+A: toCIDR/toCIDRSet or fromCIDR/fromCIDRSet.
+
+Q: How identify external world?
+A: Cilium entity `world` (subject to topology/version semantics).
+
+Q: How create explicit deny?
+A: ingressDeny / egressDeny.
+
+Q: Does last policy win?
+A: No; understand additive allows and matching denies.
+
+Q: How troubleshoot a dropped packet?
+A: Hubble + cilium monitor + policy/endpoint inspection.
+
+## 50. FAST COMMANDS — COPY/PASTE
+# Kubernetes policies
+kubectl get cnp -A
+kubectl get cnp NAME -n NAMESPACE -o yaml
+kubectl describe cnp NAME -n NAMESPACE
+kubectl apply -f policy.yaml
+kubectl delete cnp NAME -n NAMESPACE
+
+# Clusterwide policies
+kubectl get ciliumclusterwidenetworkpolicies
+kubectl get ciliumclusterwidenetworkpolicy NAME -o yaml
+kubectl describe ciliumclusterwidenetworkpolicy NAME
+
+# Pods/labels
+kubectl get pods -A --show-labels
+kubectl get pod POD -n NS -o yaml
+
+# Cilium
+cilium status
+cilium endpoint list
+cilium endpoint get ENDPOINT_ID
+cilium policy get
+cilium monitor
+cilium monitor -t drop
+
+# Hubble
+hubble status
+hubble observe
+hubble observe --verdict DROPPED
+hubble observe --namespace default
+hubble observe --from-pod default/frontend
+hubble observe --to-pod default/backend
+
+## 51. GOLDEN CHECKLIST BEFORE APPLYING A POLICY
+[ ] Correct CNP vs CCNP?
+[ ] Correct namespace?
+[ ] endpointSelector matches the intended endpoints?
+[ ] Namespace label required?
+[ ] Correct ingress vs egress direction?
+[ ] Correct fromEndpoints/toEndpoints?
+[ ] Correct CIDR/entity/FQDN selector?
+[ ] Correct protocol + port?
+[ ] L7 rule on the correct port?
+[ ] DNS allowed if destination is DNS-based?
+[ ] Return traffic understood?
+[ ] Any matching deny rule?
+[ ] Existing NetworkPolicy/CNP/CCNP interactions checked?
+[ ] Hubble test prepared?
+[ ] Rollback/delete command ready?
+
+## 52. ONE-PAGE SYNTAX MAP
+CNP / CCNP
+  spec:
+    endpointSelector: {}                 # select workloads
+    ingress:
+    - fromEndpoints:                     # source workloads
+      - matchLabels: {...}
+      fromCIDR: [...]                    # source IP/CIDRs
+      fromCIDRSet: [...]                 # source CIDR + exceptions
+      fromEntities: [...]                # Cilium identities/entities
+      toPorts:
+      - ports:
+        - port: "80"
+          protocol: TCP
+        rules:
+          http: [...]                    # L7 HTTP
+          dns: [...]                     # L7 DNS
+          kafka: [...]                   # L7 Kafka where supported
+    ingressDeny: [...]                   # explicit deny
+
+    egress:
+    - toEndpoints:                       # destination workloads
+      - matchLabels: {...}
+      toCIDR: [...]                      # destination IP/CIDRs
+      toCIDRSet: [...]                   # destination CIDR + exceptions
+      toEntities: [...]                  # destination entities
+      toFQDNs:                           # DNS-name destinations
+      - matchName: "api.example.com"
+      - matchPattern: "*.example.com"
+      toPorts:
+      - ports:
+        - port: "443"
+          protocol: TCP
+        rules:
+          http: [...]                    # L7 HTTP
+          dns: [...]                     # L7 DNS
+    egressDeny: [...]                    # explicit deny
+
+Host/CCNP:
+  spec:
+    nodeSelector: {...}                  # host policy (CCNP)
+
+## 53. FINAL TROUBLESHOOTING DECISION TREE
+CONNECTION FAILS
+  |
+  +-- Is destination Pod selected by an ingress policy?
+  |      YES -> inspect ingress allows/denies
+  |
+  +-- Is source Pod selected by an egress policy?
+  |      YES -> inspect egress allows/denies
+  |
+  +-- Is L4 port/protocol allowed?
+  |
+  +-- Is L7 HTTP/DNS/etc. rule matching?
+  |
+  +-- Is DNS resolution itself allowed?
+  |
+  +-- For FQDN: is destination covered by toFQDNs?
+  |
+  +-- Is traffic going through Service/LB/Ingress and changing identity?
+  |
+  +-- Hubble: DROPPED or FORWARDED?
+  |
+  +-- cilium monitor -t drop: why dropped?
+  |
+  +-- Check other NetworkPolicy/CNP/CCNP rules.
+
+## 54. VERSION-SAFETY NOTE
+Cilium policy is feature-rich and some selector fields, L7 protocol support,
+port-range behavior, host-policy capabilities, and CLI flags depend on release.
+For production/exam use, confirm the exact Cilium version and CRD schema:
+
+  cilium version
+  kubectl explain ciliumnetworkpolicy --recursive
+  kubectl get crd ciliumnetworkpolicies.cilium.io -o yaml
+
+Official documentation:
+  https://docs.cilium.io/en/stable/network/kubernetes/policy/
+  https://docs.cilium.io/en/latest/security/policy/layer3/
+  https://docs.cilium.io/en/latest/security/policy/layer7/
+
+END OF CNP MASTER CHEATSHEET
+===========================================================
