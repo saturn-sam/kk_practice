@@ -120,6 +120,39 @@ KVStoreMesh
 Cilium uses a shared key-value store to help clusters discover and sync network information, so multi-cluster communication works smoothly.
 
 
-Global services
+command deploys the Cilium CLI connectivity test pod, verifying both node-to-node and pod-to-pod networking and DNS resolution?
 
-to make 
+`cilium connectivity test`
+
+
+You want to inspect the full current configuration as seen by the Cilium agent (including values from the ConfigMap, CLI flags, and environment variables), regardless of how they were set, on a specific node. Which Cilium CLI command achieves this?
+
+`cilium cli config view`
+
+need study on-
+- gateway api
+
+
+86%
+Network Policy
+
+25%
+Installation & Configuration
+
+67%
+Enabling Layer-7 Protocol Visibility
+
+50%
+Kubernetes Network Policies versus Cilium Network Policies
+
+50%
+Policy Enforcement Modes
+
+67%
+Understand the Benefits of Gateway API Over Ingress
+
+50%
+IP Address Management (IPAM) with Cilium
+
+33%
+Service Mesh

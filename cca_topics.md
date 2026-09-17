@@ -87,37 +87,13 @@
   - [10. Quick-Recall Exam Cheatsheet (Ports, CLI, Configs)](#10-quick-recall-exam-cheatsheet-ports-cli-configs)
     - [Essential Network Ports](#essential-network-ports)
     - [Key CLI Commands](#key-cli-commands)
-  - [11. CCA Practice Exam: 30 Realistic Questions \& Detailed Explanations](#11-cca-practice-exam-30-realistic-questions--detailed-explanations)
-    - [Question 1](#question-1)
-    - [Question 2](#question-2)
-    - [Question 3](#question-3)
-    - [Question 4](#question-4)
-    - [Question 5](#question-5)
-    - [Question 6](#question-6)
-    - [Question 7](#question-7)
-    - [Question 8](#question-8)
-    - [Question 9](#question-9)
-    - [Question 10](#question-10)
-    - [Question 11](#question-11)
-    - [Question 12](#question-12)
-    - [Question 13](#question-13)
-    - [Question 14](#question-14)
-    - [Question 15](#question-15)
-    - [Question 16](#question-16)
-    - [Question 17](#question-17)
-    - [Question 18](#question-18)
-    - [Question 19](#question-19)
-    - [Question 20](#question-20)
-    - [Question 21](#question-21)
-    - [Question 22](#question-22)
-    - [Question 23](#question-23)
-    - [Question 24](#question-24)
-    - [Question 25](#question-25)
-    - [Question 26](#question-26)
-    - [Question 27](#question-27)
-    - [Question 28](#question-28)
-    - [Question 29](#question-29)
-    - [Question 30](#question-30)
+  - [11. CCA Practice Exam: 60 Realistic Exam-Type Questions & Detailed Explanations](#11-cca-practice-exam-60-realistic-exam-type-questions--detailed-explanations)
+    - [Question 1 to 10](#question-1)
+    - [Question 11 to 20](#question-11)
+    - [Question 21 to 30](#question-21)
+    - [Question 31 to 40](#question-31)
+    - [Question 41 to 50](#question-41)
+    - [Question 51 to 60](#question-51)
   - [Final Review Checklist Before the Exam](#final-review-checklist-before-the-exam)
 
 ---
@@ -1243,6 +1219,11 @@ cilium-dbg monitor --type drop        # Stream dropped packet events in real tim
 cilium-dbg config view                # View running agent configuration
 cilium-dbg config set debug true      # Toggle debug logging without restart
 
+# hubble port forward
+cilium hubble port-forward
+k -n kube-system port-forward svc/hubble-relay 4245:80
+
+
 # Hubble CLI
 hubble status                         # Hubble Relay connectivity check
 hubble observe                        # Stream live network flows
@@ -1259,7 +1240,7 @@ bpftool map show                      # List all BPF maps
 
 ---
 
-## 11. CCA Practice Exam: 30 Realistic Questions & Detailed Explanations
+## 11. CCA Practice Exam: 60 Realistic Exam-Type Questions & Detailed Explanations
 
 ### Question 1
 **What happens to active pod network traffic if the `cilium-operator` deployment is scaled to 0 replicas?**
@@ -1268,8 +1249,13 @@ bpftool map show                      # List all BPF maps
 - C) Pods can communicate locally on the same node, but cross-node traffic is blocked.
 - D) eBPF programs are immediately unloaded from the Linux kernel.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** The Cilium Operator is strictly in the management/control plane, not in the datapath. Forwarding, routing, and policy enforcement are executed entirely by `cilium-agent` and kernel eBPF programs. If the operator is down, existing datapath traffic is unaffected, though cluster-level management (e.g., allocating new IPAM blocks or garbage collecting stale identities) pauses.
+
+</details>
 
 ---
 
@@ -1280,8 +1266,13 @@ bpftool map show                      # List all BPF maps
 - C) Socket layer hooks (`sock_ops` / `cgroup/sock_addr`)
 - D) Netfilter `PREROUTING`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: C**  
 > **Explanation:** Cilium attaches eBPF programs to `cgroup` socket hooks (`connect()`, `sendmsg()`). When an application creates a socket and calls `connect()` to a `ClusterIP:port`, Cilium rewrites the destination address to the backend Pod IP:port at the socket layer before packets are generated, bypassing TCP/IP packetization and NAT overhead.
+
+</details>
 
 ---
 
@@ -1292,8 +1283,13 @@ bpftool map show                      # List all BPF maps
 - C) Ingress and Egress traffic are both allowed (default-allow).
 - D) Ingress is blocked, but Egress is allowed.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: C**  
 > **Explanation:** In `default` mode, an endpoint is in "default-allow" state until at least one policy selects it. Once an Ingress policy selects the endpoint, Ingress enters default-deny while Egress remains default-allow (unless an Egress policy is also created).
+
+</details>
 
 ---
 
@@ -1304,8 +1300,13 @@ bpftool map show                      # List all BPF maps
 - C) It assigns an integer based on the pod's node name and namespace.
 - D) It uses the pod's UID from the Kubernetes API.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** Cilium's security model is identity-based, derived strictly from metadata labels (e.g., `app=frontend, env=prod`). Endpoints across the cluster that share identical labels share the exact same numeric Security Identity.
+
+</details>
 
 ---
 
@@ -1316,8 +1317,13 @@ bpftool map show                      # List all BPF maps
 - C) All clusters must use the exact same Kubernetes minor version.
 - D) Worker nodes must have direct IP connectivity across clusters.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: C**  
 > **Explanation:** Kubernetes versions do not need to be identical across clusters in a Cluster Mesh. However, unique cluster names/IDs, non-overlapping CIDRs, matching datapath modes, and node IP connectivity are strict prerequisites.
+
+</details>
 
 ---
 
@@ -1328,8 +1334,13 @@ bpftool map show                      # List all BPF maps
 - C) `hubble flows --type drop`
 - D) `hubble monitor --drop`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** The flag `--verdict DROPPED` filters live or historical flows to display only packets that were blocked by policy, dropped due to conntrack table exhaustion, or rejected by routing.
+
+</details>
 
 ---
 
@@ -1340,8 +1351,13 @@ bpftool map show                      # List all BPF maps
 - C) Socket sendmsg
 - D) kprobe `tcp_v4_rcv`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** XDP runs directly at the network interface card (NIC) driver level before the Linux kernel allocates the `sk_buff` (socket buffer) memory structure, making it the fastest possible packet processing hook in Linux.
+
+</details>
 
 ---
 
@@ -1352,8 +1368,13 @@ bpftool map show                      # List all BPF maps
 - C) IPsec creates a `cilium_wg0` interface, while WireGuard operates directly in XFRM.
 - D) WireGuard encrypts pod-to-pod traffic on the same node, while IPsec does not.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** WireGuard key generation and distribution are fully automated by Cilium via the `CiliumNode` custom resource. IPsec requires administrators to manually create and manage a Kubernetes secret named `cilium-ipsec-keys` containing the encryption key and algorithm specification.
+
+</details>
 
 ---
 
@@ -1364,8 +1385,13 @@ bpftool map show                      # List all BPF maps
 - C) `autoDirectNodeRoutes: true`
 - D) `bpf.masquerade: false`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** When kube-proxy is absent, the Cilium agent cannot resolve the `kubernetes.default.svc` ClusterIP during bootstrap. You must explicitly configure `k8sServiceHost` and `k8sServicePort` with the actual IP address and port of the Kubernetes API server so the agent can connect.
+
+</details>
 
 ---
 
@@ -1376,8 +1402,13 @@ bpftool map show                      # List all BPF maps
 - C) IPsec on ESP 50
 - D) GRE on IP protocol 47
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** Cilium defaults to VXLAN encapsulation running over UDP port `8472`.
+
+</details>
 
 ---
 
@@ -1388,8 +1419,13 @@ bpftool map show                      # List all BPF maps
 - C) Egress traffic is restricted to port 80 only.
 - D) Egress traffic is redirected to the Envoy proxy.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** In Cilium, Ingress and Egress policy enforcement are tracked independently. Applying an Ingress-only policy puts the pod into default-deny for Ingress, but Egress remains in default-allow until an Egress rule selects the pod.
+
+</details>
 
 ---
 
@@ -1400,8 +1436,13 @@ bpftool map show                      # List all BPF maps
 - C) It gathers comprehensive diagnostics, logs, BPF map states, and routing tables into a compressed tarball for troubleshooting.
 - D) It runs synthetic HTTP latency tests against endpoints.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: C**  
 > **Explanation:** `cilium bugtool` is the standard diagnostic gathering tool that extracts system information, kernel logs, agent logs, and BPF maps to assist in troubleshooting.
+
+</details>
 
 ---
 
@@ -1412,8 +1453,13 @@ bpftool map show                      # List all BPF maps
 - C) Cilium BGP Peering Policy
 - D) `cilium-dbg service update`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** Using the Kubernetes Gateway API with an `HTTPRoute`, you can specify multiple `backendRefs` with respective `weight` values (e.g., weight 90 and weight 10) to achieve canary traffic splitting.
+
+</details>
 
 ---
 
@@ -1424,8 +1470,13 @@ bpftool map show                      # List all BPF maps
 - C) `host`
 - D) `unmanaged`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: C**  
 > **Explanation:** The reserved identity `host` (numeric value `1`) represents the local host network namespace on the node.
+
+</details>
 
 ---
 
@@ -1436,8 +1487,13 @@ bpftool map show                      # List all BPF maps
 - C) DSR encrypts all traffic using IPsec automatically.
 - D) DSR works over any overlay without MTU considerations.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** Under standard SNAT, the entry node rewrites the client IP to its own IP, causing response traffic to hairpin through the entry node and obscuring client identity. DSR preserves the client source IP and enables the backend node to reply directly to the client.
+
+</details>
 
 ---
 
@@ -1448,8 +1504,13 @@ bpftool map show                      # List all BPF maps
 - C) Because FQDN rules are evaluated inside kube-dns.
 - D) To update Kubernetes CoreDNS ConfigMaps.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** Cilium does not perform independent polling of external domains. Instead, it intercepts the pod's actual DNS queries and responses to CoreDNS via an internal DNS proxy. It parses the response IPs and injects them into the pod's BPF allow list.
+
+</details>
 
 ---
 
@@ -1460,8 +1521,13 @@ bpftool map show                      # List all BPF maps
 - C) `hubble-relay`
 - D) `kube-proxy`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** `cilium-dbg` is the administrative tool located inside the `cilium` container (symlinked to `cilium` in older versions) that communicates directly with the local agent daemon via a Unix domain socket.
+
+</details>
 
 ---
 
@@ -1472,8 +1538,13 @@ bpftool map show                      # List all BPF maps
 - C) `clustermesh.cilium.io/replicated: "true"`
 - D) `io.cilium/multi-cluster: "yes"`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** The annotation `service.cilium.io/global: "true"` instructs Cilium to advertise service endpoints across all clusters joined in the mesh.
+
+</details>
 
 ---
 
@@ -1484,8 +1555,13 @@ bpftool map show                      # List all BPF maps
 - C) In an Envoy proxy instance managed by the Cilium Agent at the node level.
 - D) In the Kubernetes API Server.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: C**  
 > **Explanation:** Cilium's sidecarless architecture runs an Envoy instance embedded in or managed by `cilium-agent` on each node. Traffic requiring L7 inspection is forwarded to this node-level proxy via eBPF sockops.
+
+</details>
 
 ---
 
@@ -1496,8 +1572,13 @@ bpftool map show                      # List all BPF maps
 - C) It rejects the program at load time to prevent kernel freezes or deadlocks.
 - D) It offloads the loop execution to user space.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: C**  
 > **Explanation:** The BPF verifier performs static analysis before loading bytecode. Unbounded loops or potential infinite loops are strictly rejected to ensure the program cannot crash or freeze the Linux kernel.
+
+</details>
 
 ---
 
@@ -1508,8 +1589,13 @@ bpftool map show                      # List all BPF maps
 - C) It replaces BGP routers in physical networks.
 - D) It automatically rotates WireGuard encryption keys.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** In large meshes, having every `cilium-agent` connect to every remote cluster's etcd creates an $N \times M$ connection explosion. `KVStoreMesh` runs as a caching proxy to optimize and aggregate cross-cluster state synchronization.
+
+</details>
 
 ---
 
@@ -1520,8 +1606,13 @@ bpftool map show                      # List all BPF maps
 - C) `aws-eni`
 - D) `crd`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: C**  
 > **Explanation:** In `aws-eni` IPAM mode, the Cilium Operator interacts directly with the AWS EC2 API to allocate secondary IPs and ENIs to nodes, giving pods genuine VPC-routable IP addresses.
+
+</details>
 
 ---
 
@@ -1532,8 +1623,13 @@ bpftool map show                      # List all BPF maps
 - C) `CiliumClusterwideNetworkPolicy`
 - D) `CiliumNodeConfig`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** A `CiliumEgressGatewayPolicy` (CEGP) steers egress traffic matching specific pod/destination selectors to an egress gateway node that SNATs the packets with a dedicated static IP.
+
+</details>
 
 ---
 
@@ -1544,8 +1640,13 @@ bpftool map show                      # List all BPF maps
 - C) It disables encryption and uses plaintext security tokens.
 - D) It relies on Linux user-space iptables tunnels.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** Cilium decouples the authentication control plane from the data plane. SPIFFE/SPIRE performs mutual attestation and issues certificates, while the eBPF datapath validates that an authenticated connection is active and forwards packets at bare-metal line rate.
+
+</details>
 
 ---
 
@@ -1556,8 +1657,13 @@ bpftool map show                      # List all BPF maps
 - C) `bpftool config show`
 - D) `cilium-operator status`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: A**  
 > **Explanation:** `cilium-dbg config view` prints all active configuration flags, routing modes, and BPF features enabled on the local node's agent.
+
+</details>
 
 ---
 
@@ -1568,8 +1674,13 @@ bpftool map show                      # List all BPF maps
 - C) 1024
 - D) 65535
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** In Cilium Cluster Mesh, Cluster IDs must be unique integers between `1` and `255` (allocated within an 8-bit field in packet metadata/identity allocation).
+
+</details>
 
 ---
 
@@ -1580,8 +1691,13 @@ bpftool map show                      # List all BPF maps
 - C) `CiliumClusterwideNetworkPolicy`
 - D) `CiliumGlobalPolicy`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: C**  
 > **Explanation:** `CiliumClusterwideNetworkPolicy` (CCNP) is a non-namespaced cluster-scoped resource that applies policy rules across all namespaces or against cluster nodes.
+
+</details>
 
 ---
 
@@ -1592,8 +1708,13 @@ bpftool map show                      # List all BPF maps
 - C) Hubble Ingress
 - D) Hubble Verifier
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** Hubble Relay acts as a gRPC aggregator. It connects to the Hubble servers on every individual node (over port 4244) and presents a single, cluster-wide flow API on port 4245.
+
+</details>
 
 ---
 
@@ -1604,8 +1725,13 @@ bpftool map show                      # List all BPF maps
 - C) Cilium disables eBPF and falls back to Linux bridging.
 - D) Cilium assigns public IP addresses to all pods.
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: B**  
 > **Explanation:** When nodes are on the same L2 subnet, `autoDirectNodeRoutes: true` configures host routing entries pointing to peer nodes as next-hops for their respective Pod CIDRs, enabling direct native routing without a BGP daemon or overlay encapsulation.
+
+</details>
 
 ---
 
@@ -1616,8 +1742,523 @@ bpftool map show                      # List all BPF maps
 - C) `hubble filter --drop`
 - D) `tcpdump -i any drop`
 
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
 > **Answer: A**  
 > **Explanation:** `cilium-dbg monitor --type drop` taps into the agent's internal BPF notification ring buffer and prints dropped packet events with reason codes in real time.
+
+</details>
+
+---
+
+### Question 31
+**A network engineer notices that TCP throughput drops significantly after switching Cilium from Native Routing to VXLAN Encapsulation mode with standard MTU (1500). What is the most likely cause of this issue?**
+- A) VXLAN drops all TCP packets with the SYN flag enabled.
+- B) The VXLAN header adds 50 bytes of encapsulation overhead, causing packets with a 1500-byte MTU to be fragmented or dropped if Path MTU Discovery (PMTU) fails.
+- C) VXLAN automatically switches the BPF datapath from TC to XDP.
+- D) Geneve is required for TCP traffic; VXLAN only supports UDP.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** VXLAN encapsulation wraps original Ethernet frames inside an outer UDP packet, adding 50 bytes of overhead (14 bytes Ethernet + 20 bytes outer IPv4 + 8 bytes UDP + 8 bytes VXLAN). If the underlying physical network MTU is 1500, the pod MTU must be set to 1450 (1500 - 50) to prevent packet fragmentation or drops.
+
+</details>
+
+---
+
+### Question 32
+**Which of the following describes the difference between the `world` entity and the `all` entity in Cilium Network Policies?**
+- A) `world` represents nodes inside the cluster, while `all` represents external internet endpoints.
+- B) `world` represents external traffic outside the cluster network, whereas `all` encompasses all endpoints including cluster endpoints, host nodes, and external world traffic.
+- C) `world` allows only HTTP/HTTPS traffic, whereas `all` permits all L4 protocols.
+- D) `world` is deprecated in favor of `cluster`.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** The `world` entity (reserved ID 2) represents any destination or source outside the cluster / VPC. The `all` entity is a wildcard that matches all endpoints/identities, including in-cluster pods, host nodes, remote nodes, and external world traffic.
+
+</details>
+
+---
+
+### Question 33
+**If both an `allow` rule and an explicit `deny` rule in a `CiliumNetworkPolicy` match the exact same incoming packet, what is Cilium's verdict?**
+- A) The packet is allowed because allow rules always take precedence in Kubernetes.
+- B) The packet is denied because explicit deny rules always override allow rules in CiliumNetworkPolicy.
+- C) Cilium drops both the packet and restarts the endpoint.
+- D) The verdict depends on the alphabetical order of the policy rule names.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Unlike standard Kubernetes `NetworkPolicy` (which only supports allow rules with an implicit deny model), `CiliumNetworkPolicy` supports explicit `deny:` specifications. In Cilium, an explicit deny rule always supersedes an allow rule.
+
+</details>
+
+---
+
+### Question 34
+**You want to allow ping (ICMP Echo Request) from pod `app: monitor` to all pods labeled `app: backend`. Which protocol and rule type must be specified in the `CiliumNetworkPolicy`?**
+- A) `toPorts` with protocol `TCP` and port `0`.
+- B) An `icmps` rule specifying ICMP type `8` (Echo Request).
+- C) `rules.http` with method `PING`.
+- D) Standard Kubernetes `NetworkPolicy` because Cilium does not support ICMP filtering.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Cilium supports Layer 4 ICMP filtering directly in `CiliumNetworkPolicy` via the `icmps` field. An ICMP Echo Request is represented by ICMP type `8` (and IPv6 type `128`).
+
+</details>
+
+---
+
+### Question 35
+**In Cilium Service Mesh, how does the Hubble UI communicate with individual Cilium agents across the cluster to visualize real-time service maps?**
+- A) Hubble UI connects directly to the kubelet port on each node.
+- B) Hubble UI queries the Kubernetes API Server for etcd event streams.
+- C) Hubble UI queries the centralized Hubble Relay service, which connects to the Hubble server on each Cilium agent via gRPC on port 4244.
+- D) Hubble UI reads raw BPF maps mounted on host paths.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: C**  
+> **Explanation:** Hubble UI does not query agent nodes directly. Instead, Hubble UI queries `hubble-relay` via gRPC, and `hubble-relay` aggregates flow data from the local Hubble servers running inside each `cilium-agent` pod on port 4244.
+
+</details>
+
+---
+
+### Question 36
+**What is the purpose of the `service.cilium.io/shared: "false"` annotation on a multi-cluster Global Service?**
+- A) It prevents the service from being discovered by external DNS.
+- B) It designates the service as a failover-only service, meaning remote cluster endpoints are only used when all local cluster endpoints are unhealthy.
+- C) It restricts traffic to a single node within the local cluster.
+- D) It disables eBPF load balancing and delegates to IPVS.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** By default, global services (`service.cilium.io/global: "true"`) have `service.cilium.io/shared: "true"`, which load balances traffic across endpoints in all clusters. Setting `shared: "false"` creates an active/passive failover topology where remote endpoints are only contacted if local endpoints are completely unavailable.
+
+</details>
+
+---
+
+### Question 37
+**An administrator wants to secure SSH access (port 22) on all Kubernetes worker nodes using Cilium. Which resource should they create?**
+- A) A `CiliumNetworkPolicy` in namespace `kube-system` with `endpointSelector`.
+- B) A `CiliumClusterwideNetworkPolicy` with a `nodeSelector` matching the worker nodes.
+- C) A standard Kubernetes `NetworkPolicy` targeting `hostNetwork: true`.
+- D) An Ingress resource configured with TCP pass-through.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Standard `NetworkPolicy` and `CiliumNetworkPolicy` only target pods (endpoints) in specific namespaces. To apply firewall policies to the host nodes themselves (Host Firewall), you must use a `CiliumClusterwideNetworkPolicy` with `nodeSelector`.
+
+</details>
+
+---
+
+### Question 38
+**Which Cilium ecosystem component provides runtime security observability, such as monitoring process executions, namespace escapes, and file access using eBPF?**
+- A) Cilium Ingress
+- B) Tetragon
+- C) Hubble Relay
+- D) KVStoreMesh
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Tetragon is Cilium's security observability and runtime enforcement platform. It uses eBPF kprobes, tracepoints, and Linux Security Module (LSM) hooks to detect and block malicious process executions, privilege escalations, and namespace escapes in real time.
+
+</details>
+
+---
+
+### Question 39
+**How does Cilium handle key rotation without downtime when using IPsec transparent encryption?**
+- A) Administrators must restart the cluster with `cilium install --rotate-ipsec`.
+- B) The secret `cilium-ipsec-keys` is updated with a new key ID appended with a `+` symbol (e.g., `4+ rfc4106...`), indicating the new active key to use for sending while retaining prior keys for receiving.
+- C) IPsec keys rotate automatically every 60 seconds without secrets.
+- D) Cilium reboots each node sequentially.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** In IPsec mode, zero-downtime key rotation is achieved by adding a new key to the `cilium-ipsec-keys` secret with a `+` suffix after the key ID. The `+` designates the active key ID used for encrypting outbound packets, while the kernel retains prior keys to decrypt in-flight packets.
+
+</details>
+
+---
+
+### Question 40
+**Which BPF map type does Cilium primarily use for tracking active network connections (conntrack)?**
+- A) BPF Ring Buffer
+- B) BPF LRU (Least Recently Used) Hash Map
+- C) BPF Array Map
+- D) BPF Stack Trace Map
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Connection tracking requires constant-time lookups and must handle eviction gracefully when the table fills up. Cilium uses BPF LRU Hash maps (`cilium_ct4_global`, `cilium_ct6_global`) so that if the connection tracking table reaches maximum capacity, least-recently-used connections are safely recycled without stalling the kernel.
+
+</details>
+
+---
+
+### Question 41
+**What happens to pod-to-pod traffic on the SAME worker node when WireGuard transparent encryption is enabled in Cilium?**
+- A) The traffic is encrypted using ChaCha20-Poly1305 over the `cilium_wg0` interface.
+- B) The traffic is dropped because WireGuard does not support loopback.
+- C) The traffic is NOT encrypted because intra-node pod communication is transferred via local in-kernel memory structures without traversing a physical network link.
+- D) The traffic is routed through the Envoy proxy for TLS termination.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: C**  
+> **Explanation:** WireGuard and IPsec in Cilium are designed for transparent node-to-node (wire) encryption. When two pods reside on the same physical host, packets are redirected locally via eBPF without ever touching a physical network wire; thus, intra-node traffic is not encrypted.
+
+</details>
+
+---
+
+### Question 42
+**You execute `cilium connectivity test` on a newly installed cluster. Where does this test tool deploy its test workloads?**
+- A) In the `default` namespace.
+- B) Directly in the `kube-system` namespace alongside Cilium agents.
+- C) In a temporary, dedicated namespace called `cilium-test`.
+- D) It does not deploy pods; it only executes pings from worker nodes.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: C**  
+> **Explanation:** `cilium connectivity test` deploys synthetic client and server pods in a dedicated namespace named `cilium-test`, performs dozens of multi-scenario connectivity and policy tests, and cleans up the namespace when finished.
+
+</details>
+
+---
+
+### Question 43
+**What is the role of port 4240 in a Cilium-managed Kubernetes cluster?**
+- A) VXLAN tunnel encapsulation.
+- B) Hubble Relay gRPC server.
+- C) Cilium health monitoring agent (`cilium-health`) HTTP/status checks between nodes.
+- D) BGP peering session port.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: C**  
+> **Explanation:** Port `4240` (TCP) is used by the `cilium-health` endpoint monitoring service running on each node to continuously test network datapath connectivity (ICMP, HTTP) between all nodes in the cluster.
+
+</details>
+
+---
+
+### Question 44
+**In Cilium Gateway API, which resource defines the actual Layer 7 routing rules, header matches, and backend service destinations for HTTP traffic?**
+- A) `GatewayClass`
+- B) `Gateway`
+- C) `HTTPRoute`
+- D) `CiliumL7Policy`
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: C**  
+> **Explanation:** Under the Kubernetes Gateway API, `GatewayClass` defines the controller type, `Gateway` defines the entry point (listeners, ports, TLS certificates), and `HTTPRoute` defines the routing rules (path matches, headers, weights, and backend service references).
+
+</details>
+
+---
+
+### Question 45
+**When configuring Cilium in `kubeProxyReplacement: strict` mode, how is the Kubernetes `NodePort` service type handled?**
+- A) Packets are forwarded to legacy `kube-proxy` iptables chains.
+- B) eBPF programs attached to the host's physical network interface (via XDP or TC) intercept NodePort traffic and translate it directly to backend pod IPs.
+- C) NodePort is unsupported and must be converted to LoadBalancer.
+- D) NodePort packets are forwarded to CoreDNS.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** In `strict` mode, Cilium replaces kube-proxy entirely. It attaches eBPF programs to the native network interface (via XDP or TC ingress) to perform NodePort translation directly in eBPF maps at line rate.
+
+</details>
+
+---
+
+### Question 46
+**What is the primary benefit of enabling BPF Masquerade (`bpf.masquerade: true`) over traditional iptables masquerading?**
+- A) BPF Masquerade encrypts outbound packets automatically.
+- B) It avoids iptables conntrack table locks and serializes outbound SNAT directly in eBPF, significantly improving throughput for outbound connections.
+- C) It assigns public IPv6 addresses to internal pods.
+- D) It requires no Linux kernel support.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Traditional IP masquerade relies on iptables `MASQUERADE` and the Linux conntrack module, which suffers from lock contention under high connection rates. BPF Masquerade implements SNAT inside eBPF maps, eliminating iptables overhead and scaling linearly with CPU cores.
+
+</details>
+
+---
+
+### Question 47
+**A developer wants to limit outbound network traffic from a batch processing pod to 50 Megabits per second. How is this achieved with Cilium's Bandwidth Manager?**
+- A) Create a `CiliumNetworkPolicy` with `egress.bandwidthLimit: "50M"`.
+- B) Apply the annotation `kubernetes.io/egress-bandwidth: "50M"` to the pod manifest with `bandwidthManager.enabled=true` in Cilium.
+- C) Configure an Envoy rate limit filter in Gateway API.
+- D) Attach an XDP filter manually using `bpftool`.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Cilium's BPF Bandwidth Manager (based on Earliest Departure Time / EDT) reads the standard Kubernetes annotation `kubernetes.io/egress-bandwidth` on pods and enforces rate limiting directly at the network interface queue without Linux HTB/TBF queueing disciplines.
+
+</details>
+
+---
+
+### Question 48
+**What happens if a pod performs a DNS lookup for a domain allowed by a `toFQDNs` rule, but the DNS response TTL expires while the pod is still communicating with that IP?**
+- A) The ongoing TCP connection is immediately terminated with a RST packet.
+- B) Cilium removes the IP from the active BPF map once the TTL expires; however, active connections in the conntrack table remain established until closed, while new SYN packets to that IP will be dropped unless refreshed by DNS.
+- C) Cilium automatically queries CoreDNS to refresh the TTL indefinitely.
+- D) The entire pod is restarted by the CNI.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** When the TTL expires, the IP is purged from the FQDN ipcache map. Existing established connections tracked in the BPF conntrack table remain active until terminated, but any subsequent new connection attempt will be rejected unless the pod issues a new DNS query that re-populates the cache.
+
+</details>
+
+---
+
+### Question 49
+**Which entity in Cilium Network Policy represents the Kubernetes API server?**
+- A) `cluster`
+- B) `kube-apiserver`
+- C) `master`
+- D) `control-plane`
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Cilium provides a specific reserved entity named `kube-apiserver` (numeric identity 7) to allow pods (such as operators or controllers) to securely communicate with the Kubernetes API server without needing to hardcode cluster IPs or CIDRs.
+
+</details>
+
+---
+
+### Question 50
+**Which of the following describes the function of `CiliumLocalRedirectPolicy` (CLRP)?**
+- A) It routes external traffic to the nearest cloud region.
+- B) It transparently redirects pod traffic destined for a cluster-wide service to a node-local pod or DaemonSet (e.g., node-local DNS cache) without crossing the network.
+- C) It redirects dropped packets to a honeypot container.
+- D) It replaces the default Linux gateway route on the host.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** `CiliumLocalRedirectPolicy` (CLRP) redirects traffic destined for an external IP or ClusterIP service directly to a backend instance running locally on the same node (such as `node-local-dns`), ensuring traffic never leaves the host.
+
+</details>
+
+---
+
+### Question 51
+**In a multi-cluster Cluster Mesh setup, what happens if Cluster 1 has an IPAM PodCIDR of `10.244.0.0/16` and Cluster 2 also has an IPAM PodCIDR of `10.244.0.0/16`?**
+- A) Cilium automatically uses BPF NAT to resolve overlapping IPs.
+- B) Cluster Mesh connection will fail or cause catastrophic routing collisions because non-overlapping PodCIDRs and ServiceCIDRs are a mandatory requirement.
+- C) Traffic is automatically routed through Hubble Relay.
+- D) Cluster 2 is placed in read-only mode.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Cilium Cluster Mesh relies on direct pod-to-pod routing across clusters without intermediate translation. If PodCIDRs overlap, routing tables collide and cross-cluster communication becomes impossible. Non-overlapping CIDRs are a strict prerequisite.
+
+</details>
+
+---
+
+### Question 52
+**Why is Maglev Consistent Hashing preferred over random or round-robin hashing for service load balancing in large-scale Kubernetes clusters?**
+- A) Maglev encrypts packet payloads using AES-256.
+- B) Maglev ensures that backend pod failures or scale events only re-map a minimal subset of flows without requiring nodes to synchronize active connection states with each other.
+- C) Maglev allows Kubernetes services to run without endpoints.
+- D) Maglev eliminates the need for BPF maps.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Maglev consistent hashing maps client packets to backend endpoints using an invariant lookup table. When the number of backend pods changes, only flows directed to the affected pods are reassigned, preventing connection disruption across the rest of the cluster and eliminating the need for inter-node conntrack state replication.
+
+</details>
+
+---
+
+### Question 53
+**What does an endpoint status of `waiting-for-identity` indicate in `cilium-dbg endpoint list`?**
+- A) The pod has been terminated and its IP is being recycled.
+- B) The pod has been created by the CNI, but its labels have not yet been resolved into a numeric Security Identity by the agent/operator.
+- C) The pod is blocked by an explicit deny policy.
+- D) The pod is attempting to bypass eBPF verification.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** When a pod starts, the CNI provisions network interfaces and registers the endpoint. The endpoint enters `waiting-for-identity` while `cilium-agent` communicates with the Kubernetes API / operator to allocate or resolve the Security Identity corresponding to the pod's labels.
+
+</details>
+
+---
+
+### Question 54
+**What command allows you to view all services and their active backend pod IP addresses in Cilium's eBPF load-balancing table?**
+- A) `cilium-dbg service list`
+- B) `hubble service show`
+- C) `bpftool service dump`
+- D) `kubectl get bpf-services`
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: A**  
+> **Explanation:** `cilium-dbg service list` (executed inside the `cilium-agent` container) displays the complete BPF service load balancing table (`cilium_lb4_services_v2`), showing Service IPs, ports, and associated backend pod endpoints.
+
+</details>
+
+---
+
+### Question 55
+**In Cilium Network Policy for Kafka, which Layer 7 attributes can be inspected and filtered?**
+- A) Kafka brokers only.
+- B) Kafka Topic names and client actions (e.g., `produce` vs. `consume`).
+- C) Partition rebalance counters.
+- D) Zookeeper election states.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Cilium includes native Layer 7 protocol parsing for Apache Kafka. A `CiliumNetworkPolicy` can restrict client pods to specific Kafka topics and dictate permitted operations (e.g., allowing `role: consume` while blocking `role: produce`).
+
+</details>
+
+---
+
+### Question 56
+**What is the function of the BPF tail call mechanism in Cilium's datapath programs?**
+- A) It calls user-space daemons whenever a packet arrives.
+- B) It allows an eBPF program to invoke and jump to another eBPF program without returning, enabling modular code architecture while staying within kernel instruction limits.
+- C) It loops indefinitely until a packet is acknowledged.
+- D) It offloads packet execution to physical NIC hardware.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** The Linux kernel limits the maximum instructions per BPF program. Cilium uses tail calls to chain modular BPF programs together (e.g., from parse $\rightarrow$ policy lookup $\rightarrow$ NAT $\rightarrow$ egress), allowing complex packet processing without exceeding verification complexity or instruction boundaries.
+
+</details>
+
+---
+
+### Question 57
+**You want to deploy Cilium on Amazon EKS while retaining AWS VPC IP allocation for Pods. Which IPAM mode should you configure in Cilium?**
+- A) `cluster-pool`
+- B) `aws-eni`
+- C) `kubernetes`
+- D) `host-local`
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** In `aws-eni` mode, Cilium's operator interacts directly with the AWS EC2 API to manage ENIs and allocate secondary IPv4/IPv6 addresses directly to pods, integrating natively with AWS VPC networking without requiring the AWS VPC CNI plugin.
+
+</details>
+
+---
+
+### Question 58
+**What is the purpose of the `--follow` (`-f`) flag when using the Hubble CLI?**
+- A) It tracks a specific node until it reboots.
+- B) It streams network flows in real time as they occur, similar to `tail -f`.
+- C) It automatically traces the upstream Git commit of the Cilium agent.
+- D) It forwards packets to an external syslog server.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** Running `hubble observe --follow` keeps the connection open and continuously prints live packet flow events to the terminal as they are captured by eBPF probes.
+
+</details>
+
+---
+
+### Question 59
+**What is the key difference between `CiliumNetworkPolicy` and `CiliumClusterwideNetworkPolicy`?**
+- A) `CiliumNetworkPolicy` applies to clusters; `CiliumClusterwideNetworkPolicy` applies to namespaces.
+- B) `CiliumNetworkPolicy` is namespaced and selects pods within its namespace, whereas `CiliumClusterwideNetworkPolicy` is cluster-scoped, selecting pods across all namespaces or cluster nodes.
+- C) `CiliumClusterwideNetworkPolicy` can only enforce Layer 3 rules, while `CiliumNetworkPolicy` supports Layer 7.
+- D) `CiliumClusterwideNetworkPolicy` requires IPsec to be enabled.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: B**  
+> **Explanation:** `CiliumNetworkPolicy` is a namespaced resource that targets pods within that specific namespace. `CiliumClusterwideNetworkPolicy` (CCNP) is cluster-scoped, allowing administrators to define global security boundaries across all namespaces and host nodes with a single manifest.
+
+</details>
+
+---
+
+### Question 60
+**When observing dropped traffic with `hubble observe --verdict DROPPED`, you see the drop reason `Policy denied`. How should you investigate which policy rule caused the drop?**
+- A) Run `cilium-dbg endpoint list` to identify the endpoint ID, then run `cilium-dbg policy get <endpoint-id>` and review `cilium-dbg monitor --type policy-verdict`.
+- B) Check `/var/log/messages` on the control-plane node.
+- C) Restart the `cilium-operator` deployment.
+- D) Inspect the `kube-proxy` ConfigMap in `kube-system`.
+
+<details>
+<summary><b>Reveal Answer &amp; Explanation</b></summary>
+
+> **Answer: A**  
+> **Explanation:** The endpoint ID can be located via `cilium-dbg endpoint list`. Inspecting the endpoint with `cilium-dbg policy get <endpoint-id>` displays the active allow/deny rules compiled for that identity, and `cilium-dbg monitor --type policy-verdict` displays the real-time verdict events and identity numbers causing the drop.
+
+</details>
 
 ---
 
